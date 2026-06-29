@@ -73,36 +73,72 @@
 
   <!-- Input box -->
   <div style="
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 8px;
-    width: 500px;
-  ">
-    <input id="input" type="text" placeholder="Talk to Yuki..." style="
-      flex: 1;
-      padding: 12px 18px;
-      border-radius: 24px;
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  width: 500px;
+  align-items: center;
+">
+  <input id="input" type="text" placeholder="Talk to Yuki..." style="
+    flex: 1;
+    padding: 12px 18px;
+    border-radius: 24px;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    font-size: 15px;
+    backdrop-filter: blur(10px);
+    outline: none;
+  " onkeydown="if(event.key==='Enter'){waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''}" />
+  
+  <button onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''" style="
+    padding: 12px 20px;
+    border-radius: 24px;
+    border: none;
+    background: rgba(255,255,255,0.3);
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+  ">Send</button>
+
+  <!-- Mic button -->
+  <button id="micBtn"
+    onmousedown="waifuAPI.startRecording()"
+    onmouseup="waifuAPI.stopRecording()"
+    ontouchstart="waifuAPI.startRecording()"
+    ontouchend="waifuAPI.stopRecording()"
+    style="
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
       border: none;
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 107, 157, 0.6);
       color: white;
-      font-size: 15px;
-      backdrop-filter: blur(10px);
-      outline: none;
-    " />
-    <button onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''" style="
-      padding: 12px 20px;
-      border-radius: 24px;
-      border: none;
-      background: rgba(255,255,255,0.3);
-      color: white;
-      font-size: 15px;
+      font-size: 22px;
       cursor: pointer;
       backdrop-filter: blur(10px);
-    ">Send</button>
-  </div>
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">🎤</button>
+    <button id="autoBtn"
+  onclick="waifuAPI.toggleAutoListen()"
+  style="
+    padding: 12px 16px;
+    border-radius: 24px;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    white-space: nowrap;
+  ">🔁 Auto</button>
+</div>
 
   <!-- Avatar switcher -->
   <div style="

@@ -350,10 +350,22 @@ function handleServerMessage(msg) {
         playNextAudio();
       }
       break;
+      case 'transcript':
+  // Show what was heard in input box
+  document.getElementById('input').value = msg.text;
+  break;
+
+case 'status':
+  showStatus(msg.text, 'orange');
+  break;
 
     case 'done':
-      finishResponse();
-      break;
+  finishResponse();
+  // Auto listen after Yuki finishes speaking
+  if (autoListen) {
+    waitForAudioThenListen();
+  }
+  break;
   }
 }
 
@@ -429,3 +441,100 @@ connectToServer();
 // Expose to global API
 window.waifuAPI.sendMessage = sendMessage;
 window.waifuAPI.connectToServer = connectToServer;
+
+// ── Microphone Input ──────────────────────────────────────
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    isRecording = true;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const base64Audio = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => 
+          data + String.fromCharCode(byte), '')
+      );
+
+      // Send audio to server
+      if (isConnected && socket) {
+        socket.send(JSON.stringify({
+          type: 'audio_input',
+          data: base64Audio,
+          mimeType: 'audio/webm'
+        }));
+        showStatus('Processing... 🎤', 'orange');
+      }
+    };
+
+    mediaRecorder.start();
+    showStatus('Listening... 🎤', '#ff6b9d');
+    console.log('🎤 Recording started');
+
+  } catch (err) {
+    console.error('Mic error:', err);
+    showStatus('Mic access denied ❌', 'red');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+    isRecording = false;
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    console.log('🎤 Recording stopped');
+  }
+}
+
+// Expose to global API
+window.waifuAPI.startRecording = startRecording;
+window.waifuAPI.stopRecording = stopRecording;
+
+// ── Auto Listen Mode ──────────────────────────────────────
+let autoListen = false;
+
+function waitForAudioThenListen() {
+  // Wait for audio queue to finish then start listening
+  const checkQueue = setInterval(() => {
+    if (audioQueue.length === 0 && !isPlaying) {
+      clearInterval(checkQueue);
+      if (autoListen) {
+        setTimeout(() => {
+          startRecording();
+          // Auto stop after 5 seconds
+          setTimeout(() => {
+            if (isRecording) stopRecording();
+          }, 5000);
+        }, 500); // small pause before listening
+      }
+    }
+  }, 200);
+}
+
+function toggleAutoListen() {
+  autoListen = !autoListen;
+  const btn = document.getElementById('autoBtn');
+  if (autoListen) {
+    btn.style.background = 'rgba(255, 107, 157, 0.8)';
+    btn.textContent = '🔁 Auto ON';
+    showStatus('Auto-listen ON — speak after Yuki responds', '#ff6b9d');
+  } else {
+    btn.style.background = 'rgba(255,255,255,0.2)';
+    btn.textContent = '🔁 Auto';
+    showStatus('Auto-listen OFF', 'white');
+  }
+}
+
+window.waifuAPI.toggleAutoListen = toggleAutoListen;
