@@ -5,3 +5,6 @@ dist/
 .envs.env
 server/.env
 .env
+server/kokoro-v0_19.onnx
+server/voices.bin
+server/test.wav
