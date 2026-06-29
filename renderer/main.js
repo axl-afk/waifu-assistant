@@ -281,25 +281,77 @@ function connectToServer(url = 'ws://localhost:8765/ws') {
   };
 }
 
+// ── Audio Player ──────────────────────────────────────────
+let audioQueue = [];
+let isPlaying = false;
+
+function playNextAudio() {
+  if (audioQueue.length === 0) {
+    isPlaying = false;
+    setViseme(0);
+    return;
+  }
+
+  isPlaying = true;
+  const audioData = audioQueue.shift();
+  const audio = new Audio('data:audio/wav;base64,' + audioData);
+
+  // Lip sync while playing
+  audio.addEventListener('play', () => {
+    animateLipSync(audio);
+  });
+
+  audio.addEventListener('ended', () => {
+    setViseme(0);
+    playNextAudio();
+  });
+
+  audio.play().catch(e => console.error('Audio play error:', e));
+}
+
+function animateLipSync(audio) {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaElementSource(audio);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+  function updateMouth() {
+    if (audio.paused || audio.ended) return;
+    analyser.getByteFrequencyData(dataArray);
+    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    setViseme(Math.min(avg / 80, 1.0));
+    requestAnimationFrame(updateMouth);
+  }
+  updateMouth();
+}
+
 function handleServerMessage(msg) {
   switch(msg.type) {
     case 'avatar_cmd':
-      // Set emotion on avatar
       setEmotion(msg.emotion);
       break;
 
     case 'llm_token':
-      // Append token to chat display
       appendToken(msg.token);
       break;
 
     case 'sentence':
-      // Full sentence received
       console.log('📝 Sentence:', msg.text);
       break;
 
+    case 'audio':
+      // Queue audio chunk and play
+      audioQueue.push(msg.data);
+      if (!isPlaying) {
+        playNextAudio();
+      }
+      break;
+
     case 'done':
-      // Response complete
       finishResponse();
       break;
   }

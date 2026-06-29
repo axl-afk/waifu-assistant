@@ -1,13 +1,14 @@
 import asyncio
 import json
+import base64
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
+from tts import TTSEngine
 import config
 
 app = FastAPI()
 
-# Allow all origins (Flutter + browser can connect)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,6 +22,9 @@ client = AsyncOpenAI(
     base_url=config.LLM_BASE_URL,
     api_key=config.LLM_API_KEY,
 )
+
+# ── TTS Engine ────────────────────────────────────────────
+tts_engine = TTSEngine()
 
 # ── Session Manager ───────────────────────────────────────
 class Session:
@@ -82,7 +86,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"👤 User: {text}")
                 session.add_user(text)
 
-                # Stream LLM response
                 full_response = ""
                 sentence_buffer = ""
                 emotion_sent = False
@@ -103,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     full_response += token
                     sentence_buffer += token
 
-                    # Extract and send emotion from first chunk
+                    # Extract emotion
                     if not emotion_sent and any(f"[{e}]" in full_response.lower() for e in EMOTIONS):
                         emotion = extract_emotion(full_response)
                         await websocket.send_text(json.dumps({
@@ -112,7 +115,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         }))
                         emotion_sent = True
 
-                    # Send token to client
+                    # Send token
                     clean_token = remove_emotion_tag(token)
                     if clean_token:
                         await websocket.send_text(json.dumps({
@@ -120,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "token": clean_token
                         }))
 
-                    # Check sentence boundary
+                    # Sentence boundary → synthesize chunk
                     if ends_sentence(sentence_buffer):
                         clean_sentence = remove_emotion_tag(sentence_buffer).strip()
                         if clean_sentence:
@@ -128,16 +131,33 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "type": "sentence",
                                 "text": clean_sentence
                             }))
+                            # Synthesize this sentence immediately
+                            try:
+                                audio_bytes = tts_engine.synthesize(clean_sentence)
+                                audio_b64 = base64.b64encode(audio_bytes).decode()
+                                await websocket.send_text(json.dumps({
+                                    "type": "audio",
+                                    "data": audio_b64,
+                                    "sequence": len(full_response)
+                                }))
+                            except Exception as e:
+                                print(f"TTS error: {e}")
                         sentence_buffer = ""
 
-                # Send any remaining text
+                # Handle remaining text
                 if sentence_buffer.strip():
                     clean = remove_emotion_tag(sentence_buffer).strip()
                     if clean:
-                        await websocket.send_text(json.dumps({
-                            "type": "sentence",
-                            "text": clean
-                        }))
+                        try:
+                            audio_bytes = tts_engine.synthesize(clean)
+                            audio_b64 = base64.b64encode(audio_bytes).decode()
+                            await websocket.send_text(json.dumps({
+                                "type": "audio",
+                                "data": audio_b64,
+                                "sequence": len(full_response)
+                            }))
+                        except Exception as e:
+                            print(f"TTS error: {e}")
 
                 session.add_assistant(remove_emotion_tag(full_response))
                 print(f"🤖 Yuki: {remove_emotion_tag(full_response)}")
