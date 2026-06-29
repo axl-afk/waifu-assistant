@@ -4,3 +4,4 @@ dist/
 *.log
 .envs.env
 server/.env
+.env
