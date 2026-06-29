@@ -248,3 +248,132 @@ window.waifuAPI = {
 
 console.log('🌸 Waifu renderer ready');
 console.log('💡 Try: waifuAPI.setEmotion("happy")');
+
+// ── WebSocket Connection to Server ────────────────────────
+let socket = null;
+let isConnected = false;
+
+function connectToServer(url = 'ws://localhost:8765/ws') {
+  socket = new WebSocket(url);
+
+  socket.onopen = () => {
+    isConnected = true;
+    console.log('✅ Connected to Yuki server');
+    // Show connected indicator
+    showStatus('Connected to Yuki ✨', 'green');
+  };
+
+  socket.onclose = () => {
+    isConnected = false;
+    console.log('❌ Disconnected from server');
+    showStatus('Disconnected — retrying...', 'red');
+    // Auto reconnect after 3 seconds
+    setTimeout(() => connectToServer(url), 3000);
+  };
+
+  socket.onerror = (err) => {
+    console.error('WebSocket error:', err);
+  };
+
+  socket.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleServerMessage(msg);
+  };
+}
+
+function handleServerMessage(msg) {
+  switch(msg.type) {
+    case 'avatar_cmd':
+      // Set emotion on avatar
+      setEmotion(msg.emotion);
+      break;
+
+    case 'llm_token':
+      // Append token to chat display
+      appendToken(msg.token);
+      break;
+
+    case 'sentence':
+      // Full sentence received
+      console.log('📝 Sentence:', msg.text);
+      break;
+
+    case 'done':
+      // Response complete
+      finishResponse();
+      break;
+  }
+}
+
+function sendMessage(text) {
+  if (!isConnected || !socket) {
+    console.warn('Not connected to server');
+    return;
+  }
+  socket.send(JSON.stringify({
+    type: 'text_input',
+    text: text
+  }));
+  appendUserMessage(text);
+}
+
+// ── Chat UI ───────────────────────────────────────────────
+let currentBubble = null;
+
+function appendUserMessage(text) {
+  const chat = document.getElementById('chat');
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 18px 18px 4px 18px;
+    margin: 6px 0 6px auto;
+    max-width: 70%;
+    font-size: 14px;
+    text-align: right;
+    backdrop-filter: blur(10px);
+  `;
+  bubble.textContent = text;
+  chat.appendChild(bubble);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function appendToken(token) {
+  const chat = document.getElementById('chat');
+  if (!currentBubble) {
+    currentBubble = document.createElement('div');
+    currentBubble.style.cssText = `
+      background: rgba(255,255,255,0.15);
+      color: white;
+      padding: 8px 14px;
+      border-radius: 18px 18px 18px 4px;
+      margin: 6px auto 6px 0;
+      max-width: 70%;
+      font-size: 14px;
+      backdrop-filter: blur(10px);
+    `;
+    chat.appendChild(currentBubble);
+  }
+  currentBubble.textContent += token;
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function finishResponse() {
+  currentBubble = null;
+}
+
+function showStatus(text, color) {
+  const status = document.getElementById('status');
+  if (status) {
+    status.textContent = text;
+    status.style.color = color;
+  }
+}
+
+// Auto connect on load
+connectToServer();
+
+// Expose to global API
+window.waifuAPI.sendMessage = sendMessage;
+window.waifuAPI.connectToServer = connectToServer;

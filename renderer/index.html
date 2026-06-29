@@ -40,7 +40,108 @@
     Loading waifu... 💫
     <span>please wait</span>
   </div>
+
   <canvas id="canvas"></canvas>
+
+  <!-- Status indicator -->
+  <div id="status" style="
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-family: sans-serif;
+    font-size: 13px;
+    background: rgba(0,0,0,0.3);
+    padding: 4px 14px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+  ">Connecting...</div>
+
+  <!-- Chat bubbles -->
+  <div id="chat" style="
+    position: absolute;
+    bottom: 100px;
+    left: 20px;
+    width: 300px;
+    max-height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    font-family: sans-serif;
+  "></div>
+
+  <!-- Input box -->
+  <div style="
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    width: 500px;
+  ">
+    <input id="input" type="text" placeholder="Talk to Yuki..." style="
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: none;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-size: 15px;
+      backdrop-filter: blur(10px);
+      outline: none;
+    " />
+    <button onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''" style="
+      padding: 12px 20px;
+      border-radius: 24px;
+      border: none;
+      background: rgba(255,255,255,0.3);
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    ">Send</button>
+  </div>
+
+  <!-- Avatar switcher -->
+  <div style="
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  ">
+    <button onclick="waifuAPI.loadAvatar('2484111366324162525.vrm')" style="
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: none;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+    ">Avatar 1</button>
+    <button onclick="waifuAPI.loadAvatar('3803401280262951642.vrm')" style="
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: none;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+    ">Avatar 2</button>
+    <button onclick="waifuAPI.loadAvatar('9063535458662491846.vrm')" style="
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: none;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+    ">Avatar 3</button>
+  </div>
+
   <script type="module" src="./main.js"></script>
 </body>
 </html>
