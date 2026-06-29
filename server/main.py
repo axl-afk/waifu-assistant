@@ -58,26 +58,35 @@ EMOTIONS = ["happy", "sad", "surprised", "embarrassed", "thinking", "excited", "
 MOTIONS  = ["greeting", "peaceSign", "shoot", "spin", "modelPose", "squat", "showFullBody"]
 
 def extract_emotion(text):
-    low = text.lower()
-    for emotion in EMOTIONS:
-        if f"[{emotion}]" in low:
-            return emotion
-    return "neutral"
+    """Return the first [emotion] tag found in text, case-insensitive."""
+    import re
+    m = re.search(r'\[(' + '|'.join(EMOTIONS) + r')\]', text, re.IGNORECASE)
+    return m.group(1).lower() if m else "neutral"
 
 def extract_motion(text):
-    low = text.lower()
-    for motion in MOTIONS:
-        # tags are case-sensitive in the prompt (e.g. [peaceSign]) but we match
-        # case-insensitively against a lowercased haystack, so lowercase motion keys too
-        if f"[{motion.lower()}]" in low:
-            return motion
+    """Return the first [motion] tag found in text, case-insensitive."""
+    import re
+    m = re.search(r'\[(' + '|'.join(re.escape(mo) for mo in MOTIONS) + r')\]', text, re.IGNORECASE)
+    if not m:
+        return None
+    found = m.group(1).lower()
+    # re-map to the correctly-cased motion key (e.g. peacesign → peaceSign)
+    for mo in MOTIONS:
+        if mo.lower() == found:
+            return mo
     return None
 
 def remove_emotion_tag(text):
+    import re
     for emotion in EMOTIONS:
         text = text.replace(f"[{emotion}]", "").replace(f"[{emotion.upper()}]", "")
     for motion in MOTIONS:
         text = text.replace(f"[{motion}]", "").replace(f"[{motion.upper()}]", "")
+    # Strip *action* and _action_ emote markers so TTS never speaks them
+    text = re.sub(r'\*[^*]*\*', '', text)
+    text = re.sub(r'_[^_]+_', '', text)
+    # Collapse any double-spaces left behind
+    text = re.sub(r' {2,}', ' ', text)
     return text.strip()
 
 def ends_sentence(text):
@@ -106,17 +115,23 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
         full_response += token
         sentence_buffer += token
 
-        # Fire the avatar_cmd (emotion + motion) exactly once, as soon as the
-        # tags appear anywhere in what we've accumulated so far.
-        if not emotion_sent and any(f"[{e}]" in full_response.lower() for e in EMOTIONS):
-            emotion = extract_emotion(full_response)
-            motion  = extract_motion(full_response)
-            await websocket.send_text(json.dumps({
-                "type": "avatar_cmd",
-                "emotion": emotion,
-                "motion": motion
-            }))
-            emotion_sent = True
+        # Fire avatar_cmd exactly once — but only after BOTH an emotion tag
+        # AND a motion tag have arrived. The prompt always outputs them on
+        # the same line so this usually fires after just a couple of tokens,
+        # but waiting for both prevents sending a motion=None cmd when only
+        # the emotion tag has streamed in yet.
+        if not emotion_sent:
+            has_emotion = extract_emotion(full_response) != "neutral" or "[neutral]" in full_response.lower()
+            has_motion  = extract_motion(full_response) is not None
+            if has_emotion and has_motion:
+                emotion = extract_emotion(full_response)
+                motion  = extract_motion(full_response)
+                await websocket.send_text(json.dumps({
+                    "type": "avatar_cmd",
+                    "emotion": emotion,
+                    "motion": motion
+                }))
+                emotion_sent = True
 
         # Stream this token to the chat bubble regardless of whether the
         # emotion tag has fired yet — this used to be nested inside the

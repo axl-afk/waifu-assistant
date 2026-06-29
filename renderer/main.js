@@ -19,14 +19,14 @@ const scene = new THREE.Scene();
 
 // ── Camera ────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 1.4, 3.5);
+camera.position.set(0, 0.9, 4.0);
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.2, 0);
+controls.target.set(0, 0.75, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.minDistance = 1.5;
-controls.maxDistance = 6;
+controls.maxDistance = 7;
 controls.enableRotate = false;
 controls.enablePan = false;
 controls.enableZoom = false;
@@ -689,13 +689,12 @@ function handleServerMessage(msg) {
         playMotion(msg.motion, { fadeIn: 0.2, holdIdleAfter: true })
           .finally(() => { llmMotionActive = false; });
       } else {
-        // No motion tag this turn (common for plain typed replies) —
-        // previously this did nothing, so if a clip had left the rig in
-        // a bad state (or it was never set since page load), the avatar
-        // would just sit there in bind pose / T-pose indefinitely.
-        // Make "no motion" mean "go to idle" explicitly, then let the
-        // autonomous idle scheduler take back over.
-        stopAllMotionClips();
+        // No motion tag this turn — just let the idle scheduler keep
+        // running. Calling stopAllMotionClips() here was snapping the rig
+        // to T-pose / bind pose because it kills the active clip before
+        // the scheduler has a chance to crossfade to the next one.
+        // llmMotionActive will be cleared by the 'done' handler below,
+        // which is enough to hand back control to the idle scheduler.
       }
       break;
     case 'llm_token':
@@ -727,6 +726,10 @@ function handleServerMessage(msg) {
 
 function sendMessage(text) {
   if (!isConnected || !socket || !text.trim()) return;
+  // Block the idle scheduler immediately so the gap between sending and
+  // receiving avatar_cmd doesn't let it call stopAllMotionClips() and
+  // snap the rig to T-pose / bind pose.
+  llmMotionActive = true;
   socket.send(JSON.stringify({ type: 'text_input', text }));
   appendUserMessage(text);
 }
@@ -765,6 +768,10 @@ function showStatus(text, color) {
 let mediaRecorder = null, audioChunks = [], isRecording = false;
 
 async function startRecording() {
+  // Block the idle scheduler immediately — the round-trip (mic → STT →
+  // LLM → avatar_cmd) takes several seconds. Without this the scheduler
+  // fires stopAllMotionClips() during the wait and snaps to T-pose.
+  llmMotionActive = true;
   try {
     const stream  = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
@@ -792,6 +799,8 @@ async function startRecording() {
   } catch(e) {
     console.error('Mic error:', e);
     showStatus('Mic denied ❌', 'red');
+    // Unblock the idle scheduler since no audio will arrive.
+    llmMotionActive = false;
   }
 }
 
