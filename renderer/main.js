@@ -119,7 +119,7 @@ function loadAvatar(filename) {
 }
 
 // Load default avatar
-loadAvatar(AVATARS[0]);
+loadAvatar('5018128617262021736.vrm');
 
 // ── Idle Animations ───────────────────────────────────────
 let blinkTimer = 0;
