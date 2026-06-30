@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+websockets
+python-dotenv
+openai
+faster-whisper
+kokoro-onnx
+soundfile
+numpy
+requests
