@@ -6,6 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from tts import TTSEngine
+import system_control
 import config
 
 app = FastAPI()
@@ -58,43 +59,128 @@ EMOTIONS = ["happy", "sad", "surprised", "embarrassed", "thinking", "excited", "
 MOTIONS  = ["greeting", "peaceSign", "shoot", "spin", "modelPose", "squat", "showFullBody"]
 
 def extract_emotion(text):
-    """Return the first [emotion] tag found in text, case-insensitive."""
-    import re
-    m = re.search(r'\[(' + '|'.join(EMOTIONS) + r')\]', text, re.IGNORECASE)
-    return m.group(1).lower() if m else "neutral"
+    low = text.lower()
+    for emotion in EMOTIONS:
+        if f"[{emotion}]" in low:
+            return emotion
+    return "neutral"
 
 def extract_motion(text):
-    """Return the first [motion] tag found in text, case-insensitive."""
-    import re
-    m = re.search(r'\[(' + '|'.join(re.escape(mo) for mo in MOTIONS) + r')\]', text, re.IGNORECASE)
-    if not m:
-        return None
-    found = m.group(1).lower()
-    # re-map to the correctly-cased motion key (e.g. peacesign → peaceSign)
-    for mo in MOTIONS:
-        if mo.lower() == found:
-            return mo
+    low = text.lower()
+    for motion in MOTIONS:
+        if f"[{motion.lower()}]" in low:
+            return motion
     return None
 
 def remove_emotion_tag(text):
-    import re
     for emotion in EMOTIONS:
         text = text.replace(f"[{emotion}]", "").replace(f"[{emotion.upper()}]", "")
     for motion in MOTIONS:
         text = text.replace(f"[{motion}]", "").replace(f"[{motion.upper()}]", "")
-    # Strip *action* and _action_ emote markers so TTS never speaks them
-    text = re.sub(r'\*[^*]*\*', '', text)
-    text = re.sub(r'_[^_]+_', '', text)
-    # Collapse any double-spaces left behind
-    text = re.sub(r' {2,}', ' ', text)
     return text.strip()
 
 def ends_sentence(text):
     return any(text.strip().endswith(p) for p in [".", "?", "!", "...", "~"])
 
+
+# ── Step 1: Check if the LLM wants to call system function(s) ─
+async def check_for_tool_calls(session, user_text):
+    """
+    Non-streaming call to see if this message should trigger one or more
+    system actions. Executes ALL tool calls returned (not just the first),
+    so compound requests like "open Safari and search YouTube" work.
+    Returns (combined_result_text, did_call_any: bool)
+    """
+    # Clean, separate system prompt for tool-checking — NOT the character
+    # prompt with [emotion][motion] instructions. Mixing them confuses the
+    # model into faking function-call syntax as plain text.
+    tool_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a function-calling assistant. If the user's message "
+                "requests one or more system actions, call the appropriate "
+                "function(s):\n"
+                "- 'open Safari and search YouTube for X' → call search_in_app "
+                "with app_name='youtube' and query='X' (this automatically "
+                "opens Safari, searches, AND plays the first video — no "
+                "separate open_app call needed)\n"
+                "- 'open Spotify and play music' → call open_app with "
+                "app_name='Spotify', THEN call media_control with "
+                "action='play' (both calls together, in that order)\n"
+                "- 'pause the video' or 'pause music' → call media_control "
+                "with action='pause'\n"
+                "- volume, brightness, wifi, screenshots, locking screen, "
+                "or general web search → call the matching function\n"
+                "Call multiple functions if the request has multiple parts. "
+                "Otherwise, do not call any function."
+            )
+        },
+        {"role": "user", "content": user_text}
+    ]
+
+    response = await client.chat.completions.create(
+        model=config.LLM_MODEL,
+        messages=tool_messages,
+        tools=system_control.TOOLS,
+        tool_choice="auto",
+        max_tokens=300,
+        temperature=0.1,
+    )
+
+    choice = response.choices[0]
+    tool_calls = choice.message.tool_calls
+
+    if not tool_calls:
+        return None, False
+
+    results = []
+    for call in tool_calls:
+        fn_name = call.function.name
+        try:
+            fn_args = json.loads(call.function.arguments)
+        except Exception:
+            fn_args = {}
+
+        print(f"🔧 Calling function: {fn_name}({fn_args})")
+        result = system_control.execute_function(fn_name, fn_args)
+        print(f"🔧 Result: {result}")
+        results.append(result)
+
+        session.history.append({
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": call.id,
+                "type": "function",
+                "function": {"name": fn_name, "arguments": call.function.arguments}
+            }]
+        })
+        session.history.append({
+            "role": "tool",
+            "tool_call_id": call.id,
+            "content": result
+        })
+
+    return " | ".join(results), True
+
+
 # ── Shared LLM + TTS pipeline ─────────────────────────────
 async def run_llm_tts_pipeline(websocket, session, user_text):
     session.add_user(user_text)
+
+    try:
+        tool_result, did_call = await check_for_tool_calls(session, user_text)
+    except Exception as e:
+        print(f"Tool check error: {e}")
+        did_call = False
+
+    if did_call:
+        await websocket.send_text(json.dumps({
+            "type": "status",
+            "text": f"⚙️ {tool_result}"
+        }))
+
     full_response = ""
     sentence_buffer = ""
     emotion_sent = False
@@ -115,28 +201,16 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
         full_response += token
         sentence_buffer += token
 
-        # Fire avatar_cmd exactly once — but only after BOTH an emotion tag
-        # AND a motion tag have arrived. The prompt always outputs them on
-        # the same line so this usually fires after just a couple of tokens,
-        # but waiting for both prevents sending a motion=None cmd when only
-        # the emotion tag has streamed in yet.
-        if not emotion_sent:
-            has_emotion = extract_emotion(full_response) != "neutral" or "[neutral]" in full_response.lower()
-            has_motion  = extract_motion(full_response) is not None
-            if has_emotion and has_motion:
-                emotion = extract_emotion(full_response)
-                motion  = extract_motion(full_response)
-                await websocket.send_text(json.dumps({
-                    "type": "avatar_cmd",
-                    "emotion": emotion,
-                    "motion": motion
-                }))
-                emotion_sent = True
+        if not emotion_sent and any(f"[{e}]" in full_response.lower() for e in EMOTIONS):
+            emotion = extract_emotion(full_response)
+            motion  = extract_motion(full_response)
+            await websocket.send_text(json.dumps({
+                "type": "avatar_cmd",
+                "emotion": emotion,
+                "motion": motion
+            }))
+            emotion_sent = True
 
-        # Stream this token to the chat bubble regardless of whether the
-        # emotion tag has fired yet — this used to be nested inside the
-        # "not emotion_sent" block above, which meant every token AFTER the
-        # first one stopped being sent for the rest of the response.
         clean_token = remove_emotion_tag(token)
         if clean_token:
             await websocket.send_text(json.dumps({
@@ -144,8 +218,6 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
                 "token": clean_token
             }))
 
-        # Flush + synthesize whenever the buffer completes a sentence —
-        # also no longer gated behind emotion_sent.
         if ends_sentence(sentence_buffer):
             clean_sentence = remove_emotion_tag(sentence_buffer).strip()
             if clean_sentence:
@@ -165,7 +237,6 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
                     print(f"TTS error: {e}")
             sentence_buffer = ""
 
-    # Flush any trailing partial sentence that never hit a terminator
     if sentence_buffer.strip():
         clean = remove_emotion_tag(sentence_buffer).strip()
         if clean:
@@ -184,9 +255,6 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
             except Exception as e:
                 print(f"TTS error: {e}")
 
-    # Safety net: if the model never emitted a recognizable [emotion] tag at
-    # all, we still need to tell the frontend to settle back to idle instead
-    # of leaving it on whatever motion was last played.
     if not emotion_sent:
         await websocket.send_text(json.dumps({
             "type": "avatar_cmd",
@@ -207,17 +275,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            # A read timeout here lets us notice a half-dead connection (e.g.
-            # wifi drop) instead of hanging on receive_text() forever, which
-            # was contributing to silent "stuck" sessions that only looked
-            # like disconnects client-side.
             try:
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=60)
             except asyncio.TimeoutError:
-                # No message in 60s — send a server-initiated ping so the
-                # client's onclose fires promptly if the socket is actually
-                # dead, instead of looking "stuck" until a longer OS-level
-                # timeout kicks in.
                 try:
                     await websocket.send_text(json.dumps({"type": "pong"}))
                 except Exception:
@@ -276,10 +336,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         "type": "status",
                         "text": "Could not hear you, try again"
                     }))
-                    # IMPORTANT: still tell the client we're "done" so
-                    # autoListen (which waits for the 'done' event before
-                    # re-arming the mic) doesn't get stuck forever after a
-                    # failed transcription.
                     await websocket.send_text(json.dumps({"type": "done"}))
 
             elif message["type"] == "ping":
