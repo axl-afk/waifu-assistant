@@ -1,6 +1,14 @@
 # Waifu Assistant
 
-A customizable AI waifu assistant powered by OpenAI-compatible LLM APIs.
+A customizable AI voice assistant with a real-time 3D animated character.
+
+## Features
+
+* 🎤 Voice interaction
+* 🧠 Powered by OpenAI-compatible LLM APIs
+* 🧍 Real-time 3D animated assistant
+* 💻 Execute system information commands using voice
+* ⚙️ Customizable character and AI model
 
 ## Installation
 
@@ -13,7 +21,7 @@ chmod +x install.sh start.sh
 
 ## Configuration
 
-Create or edit `server/.env`:
+Edit `server/.env`:
 
 ```env
 HOST=0.0.0.0
@@ -26,21 +34,10 @@ LLM_MODEL=llama-3.3-70b-versatile
 CHARACTER_NAME=Yuki
 ```
 
-Get an API key from a provider that supports OpenAI-style APIs, such as Groq.
+Get an API key from any OpenAI-compatible provider, such as Groq.
 
 ## Run
 
 ```bash
 ./start.sh
-```
-
-## Project Structure
-
-```text
-waifu-assistant/
-├── install.sh
-├── start.sh
-└── server/
-    ├── requirements.txt
-    └── .env
 ```
