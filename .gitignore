@@ -1,10 +1,30 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+server/.env
+
+# Node
 node_modules/
 dist/
-.DS_Store
-*.log
-.envs.env
-server/.env
-.env
+.vite/
+
+# AI Models (too large for git — run download_models.py instead)
 server/kokoro-v0_19.onnx
 server/voices.bin
 server/test.wav
+server/models/
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
