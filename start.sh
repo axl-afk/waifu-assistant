@@ -20,7 +20,7 @@ SERVER_PID=$!
 sleep 6
 
 # Start Vite renderer and open browser automatically
-(cd renderer && npx vite --open) &
+(cd renderer && npx vite --host 0.0.0.0 --open) &
 RENDERER_PID=$!
 
 echo ""
