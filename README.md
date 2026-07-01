@@ -13,9 +13,7 @@
   <img src="https://img.shields.io/badge/3D-VRM%20%2B%20Three.js-orange?style=flat-square"/>
 </p>
 
-![Uploading Screenshot 2026-07-01 at 2.49.18 AM.png…]()
-
-
+<img width="1913" height="1059" alt="Screenshot 2026-07-01 at 2 49 18 AM" src="https://github.com/user-attachments/assets/872f4613-51d1-46af-beb8-37447e6e64e0" />
 
 ---
 
