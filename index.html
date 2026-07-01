@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Waifu Assistant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: rgb(217, 237, 226);
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    #loading {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #333;
+      font-size: 18px;
+      text-align: center;
+    }
+    #loading span { display: block; margin-top: 10px; font-size: 13px; opacity: 0.6; }
+
+    #status {
+      position: absolute;
+      top: 14px; left: 50%;
+      transform: translateX(-50%);
+      color: #333;
+      font-size: 13px;
+      background: rgba(255,255,255,0.5);
+      padding: 4px 16px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+    }
+
+    #chat {
+      position: absolute;
+      bottom: 110px; left: 16px;
+      width: 280px;
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Bottom bar ── */
+    #bottomBar {
+      position: absolute;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      width: 520px;
+    }
+    #input {
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: none;
+      background: rgba(255,255,255,0.5);
+      color: #333;
+      font-size: 15px;
+      backdrop-filter: blur(10px);
+      outline: none;
+    }
+    .btn {
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: none;
+      background: rgba(255,255,255,0.4);
+      color: #333;
+      font-size: 15px;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      white-space: nowrap;
+    }
+    .btn:hover { background: rgba(255,255,255,0.7); }
+    #micBtn {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(255,107,157,0.5);
+      font-size: 22px;
+    }
+    #micBtn:hover { background: rgba(255,107,157,0.8); }
+
+    /* ── Avatar switcher ── */
+    #avatarPanel {
+      position: absolute;
+      top: 14px; right: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .avBtn {
+      padding: 5px 12px;
+      border-radius: 12px;
+      border: none;
+      background: rgba(255,255,255,0.4);
+      color: #333;
+      font-size: 12px;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    }
+    .avBtn:hover { background: rgba(255,255,255,0.75); }
+    .avBtn.active { background: rgba(255,107,157,0.5); font-weight: 600; }
+  </style>
+  <script type="module" crossorigin src="/assets/index-V5gd_zPN.js"></script>
+</head>
+<body>
+
+  <div id="loading">Loading Yuki... 💫<span>please wait</span></div>
+  <canvas id="canvas"></canvas>
+  <div id="status">Connecting...</div>
+
+  <!-- Chat bubbles -->
+  <div id="chat"></div>
+
+  <!-- Bottom input bar -->
+  <div id="bottomBar">
+    <input id="input" type="text" placeholder="Talk to Yuki..."
+      onkeydown="if(event.key==='Enter'){ waifuAPI.sendMessage(this.value); this.value=''; }" />
+
+    <button class="btn" onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''">
+      Send
+    </button>
+
+    <button class="btn" id="micBtn"
+      onmousedown="waifuAPI.startRecording()"
+      onmouseup="waifuAPI.stopRecording()"
+      ontouchstart="waifuAPI.startRecording()"
+      ontouchend="waifuAPI.stopRecording()">🎤</button>
+
+    <button class="btn" id="autoBtn" onclick="waifuAPI.toggleAutoListen()">🔁 Auto</button>
+  </div>
+
+  <!-- Avatar switcher — all 7 models -->
+  <div id="avatarPanel">
+    <button class="avBtn active" onclick="switchAvatar(this,'2484111366324162525.vrm')">Avatar 1</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'3803401280262951642.vrm')">Avatar 2</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'9063535458662491846.vrm')">Avatar 3</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'3003516514077908910.vrm')">Avatar 4</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'38362221736407304.vrm')">Avatar 5</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'3081451431474121997.vrm')">Avatar 6</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'5018128617262021736.vrm')">Avatar 7 ★</button>
+  </div>
+
+  <script>
+    function switchAvatar(btn, filename) {
+      document.querySelectorAll('.avBtn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      waifuAPI.loadAvatar(filename);
+    }
+  </script>
+
+</body>
+</html>
