@@ -1,31 +1,34 @@
 #!/bin/bash
 # ════════════════════════════════════════════════════════════
 #  Waifu Assistant — Start Script
-#  Launches both the server and renderer, opens the browser.
+#  Just run: ./start.sh
 # ════════════════════════════════════════════════════════════
 
 cd "$(dirname "$0")"
 
+# Kill any existing instances on our ports
+lsof -ti:8765 | xargs kill -9 2>/dev/null || true
+lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+
 echo "🌸 Starting Waifu Assistant..."
 
-# Start the Python server in the background
+# Start Python server (auto-activates venv)
 (cd server && source venv/bin/activate && python3.12 main.py) &
 SERVER_PID=$!
 
-# Give the server a moment to boot (loading TTS/STT models)
-sleep 3
+# Wait for server to be ready
+sleep 6
 
-# Start the Vite renderer in the background
+# Start Vite renderer and open browser automatically
 (cd renderer && npx vite --open) &
 RENDERER_PID=$!
 
 echo ""
-echo "✅ Server running (PID $SERVER_PID)"
-echo "✅ Renderer running (PID $RENDERER_PID)"
+echo "✅ Yuki is running!"
+echo "📱 Open http://localhost:5173 in your browser"
 echo ""
-echo "Press Ctrl+C to stop everything."
+echo "Press Ctrl+C to stop."
 
-# Forward Ctrl+C to kill both background processes cleanly
-trap "echo 'Stopping...'; kill $SERVER_PID $RENDERER_PID 2>/dev/null; exit" INT TERM
+trap "echo 'Stopping Yuki...'; kill $SERVER_PID $RENDERER_PID 2>/dev/null; exit" INT TERM
 
 wait
