@@ -4,10 +4,11 @@ import base64
 from stt import STTEngine
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
 from tts import TTSEngine
 import system_control
 import config
+import settings_store
+from llm_providers import get_provider
 
 app = FastAPI()
 
@@ -19,11 +20,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── LLM Client ────────────────────────────────────────────
-client = AsyncOpenAI(
-    base_url=config.LLM_BASE_URL,
-    api_key=config.LLM_API_KEY,
-)
+# ── LLM Provider (OpenAI / local-offline / Gemini / Claude) ───────────────
+# Chosen and configured live from the web UI's settings panel (see
+# GET/POST /settings below), not by hand-editing config.py.
+llm = get_provider(settings_store.get_config())
+
+def rebuild_provider():
+    """Re-create the active provider after settings change, so a new
+    provider/key takes effect immediately with no server restart."""
+    global llm
+    llm = get_provider(settings_store.get_config())
 
 # ── TTS Engine ────────────────────────────────────────────
 tts_engine = TTSEngine()
@@ -33,6 +39,11 @@ stt_engine = STTEngine()
 
 # ── Session Manager ───────────────────────────────────────
 class Session:
+    """
+    Stores conversation history in a single provider-agnostic format
+    (plain role/content dicts), so it works unmodified no matter which
+    LLM backend is currently selected.
+    """
     def __init__(self):
         self.history = []
         self.max_history = 20
@@ -45,6 +56,14 @@ class Session:
         self.history.append({"role": "assistant", "content": text})
         self._trim()
 
+    def add_note(self, text):
+        """Record a system action's result in the conversation as a short
+        assistant-visible note, so the model has context on the next turn
+        without needing provider-specific tool-call/tool-result message
+        types (which differ across OpenAI/Gemini/Claude)."""
+        self.history.append({"role": "assistant", "content": f"[action performed: {text}]"})
+        self._trim()
+
     def _trim(self):
         if len(self.history) > self.max_history:
             self.history = self.history[-self.max_history:]
@@ -53,6 +72,7 @@ class Session:
         return [
             {"role": "system", "content": config.CHARACTER_PROMPT}
         ] + self.history
+
 
 # ── Emotion / Motion tag extraction ───────────────────────
 EMOTIONS = ["happy", "sad", "surprised", "embarrassed", "thinking", "excited", "calm", "neutral"]
@@ -83,84 +103,50 @@ def ends_sentence(text):
     return any(text.strip().endswith(p) for p in [".", "?", "!", "...", "~"])
 
 
-# ── Step 1: Check if the LLM wants to call system function(s) ─
+# ── Step 1: Check if the model wants to call system function(s) ──────────
+TOOL_SYSTEM_PROMPT = (
+    "You are a function-calling assistant. If the user's message "
+    "requests one or more system actions, call the appropriate "
+    "function(s):\n"
+    "- 'open Safari and search YouTube for X' -> call search_in_app "
+    "with app_name='youtube' and query='X' (this automatically "
+    "opens Safari, searches, AND plays the first video - no "
+    "separate open_app call needed)\n"
+    "- 'open Spotify and play music' -> call open_app with "
+    "app_name='Spotify', THEN call media_control with "
+    "action='play' (both calls together, in that order)\n"
+    "- 'pause the video' or 'pause music' -> call media_control "
+    "with action='pause'\n"
+    "- volume, brightness, wifi, screenshots, locking screen, "
+    "or general web search -> call the matching function\n"
+    "Call multiple functions if the request has multiple parts. "
+    "Otherwise, do not call any function."
+)
+
 async def check_for_tool_calls(session, user_text):
     """
-    Non-streaming call to see if this message should trigger one or more
-    system actions. Executes ALL tool calls returned (not just the first),
-    so compound requests like "open Safari and search YouTube" work.
+    Runs a non-streaming call against whichever LLM provider is active to
+    see if this message should trigger one or more system actions, then
+    executes ALL of them (not just the first), so compound requests like
+    "open Safari and search YouTube" work.
     Returns (combined_result_text, did_call_any: bool)
     """
-    # Clean, separate system prompt for tool-checking — NOT the character
-    # prompt with [emotion][motion] instructions. Mixing them confuses the
-    # model into faking function-call syntax as plain text.
-    tool_messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a function-calling assistant. If the user's message "
-                "requests one or more system actions, call the appropriate "
-                "function(s):\n"
-                "- 'open Safari and search YouTube for X' → call search_in_app "
-                "with app_name='youtube' and query='X' (this automatically "
-                "opens Safari, searches, AND plays the first video — no "
-                "separate open_app call needed)\n"
-                "- 'open Spotify and play music' → call open_app with "
-                "app_name='Spotify', THEN call media_control with "
-                "action='play' (both calls together, in that order)\n"
-                "- 'pause the video' or 'pause music' → call media_control "
-                "with action='pause'\n"
-                "- volume, brightness, wifi, screenshots, locking screen, "
-                "or general web search → call the matching function\n"
-                "Call multiple functions if the request has multiple parts. "
-                "Otherwise, do not call any function."
-            )
-        },
-        {"role": "user", "content": user_text}
-    ]
-
-    response = await client.chat.completions.create(
-        model=config.LLM_MODEL,
-        messages=tool_messages,
+    tool_calls = await llm.check_tools(
+        messages=session.history,
         tools=system_control.TOOLS,
-        tool_choice="auto",
-        max_tokens=300,
-        temperature=0.1,
+        tool_prompt=TOOL_SYSTEM_PROMPT,
     )
-
-    choice = response.choices[0]
-    tool_calls = choice.message.tool_calls
 
     if not tool_calls:
         return None, False
 
     results = []
     for call in tool_calls:
-        fn_name = call.function.name
-        try:
-            fn_args = json.loads(call.function.arguments)
-        except Exception:
-            fn_args = {}
-
-        print(f"🔧 Calling function: {fn_name}({fn_args})")
-        result = system_control.execute_function(fn_name, fn_args)
+        print(f"🔧 Calling function: {call.name}({call.arguments})")
+        result = system_control.execute_function(call.name, call.arguments)
         print(f"🔧 Result: {result}")
         results.append(result)
-
-        session.history.append({
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [{
-                "id": call.id,
-                "type": "function",
-                "function": {"name": fn_name, "arguments": call.function.arguments}
-            }]
-        })
-        session.history.append({
-            "role": "tool",
-            "tool_call_id": call.id,
-            "content": result
-        })
+        session.add_note(f"{call.name} -> {result}")
 
     return " | ".join(results), True
 
@@ -185,19 +171,11 @@ async def run_llm_tts_pipeline(websocket, session, user_text):
     sentence_buffer = ""
     emotion_sent = False
 
-    stream = await client.chat.completions.create(
-        model=config.LLM_MODEL,
+    async for token in llm.stream_chat(
         messages=session.build_messages(),
-        stream=True,
         max_tokens=300,
         temperature=0.8,
-    )
-
-    async for chunk in stream:
-        token = chunk.choices[0].delta.content
-        if not token:
-            continue
-
+    ):
         full_response += token
         sentence_buffer += token
 
@@ -346,10 +324,30 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"⚠️ WebSocket error: {e}")
 
+# ── Settings API (used by the ⚙️ panel in index.html) ─────────────────────
+@app.get("/settings")
+async def get_settings():
+    return settings_store.mask(settings_store.load())
+
+@app.post("/settings")
+async def update_settings(payload: dict):
+    settings_store.save(payload)
+    try:
+        rebuild_provider()
+    except Exception as e:
+        # e.g. picked "gemini" but google-generativeai isn't installed,
+        # or the key is missing/invalid shape
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "settings": settings_store.mask(settings_store.load())}
+
 # ── Health Check ──────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "character": config.CHARACTER_NAME}
+    return {
+        "status": "ok",
+        "character": config.CHARACTER_NAME,
+        "provider": settings_store.load()["LLM_PROVIDER"],
+    }
 
 if __name__ == "__main__":
     import uvicorn

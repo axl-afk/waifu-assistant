@@ -220,6 +220,98 @@
     .avBtn:hover  { background: var(--glass-hover); }
     .avBtn.active { background: var(--pink); font-weight: 600; }
 
+    /* ── Settings panel ────────────────────────────────── */
+    #settingsToggle {
+      position: fixed;
+      top: calc(var(--safe-t) + 12px);
+      left: 12px;
+      z-index: 20;
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      border: none;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: background 0.15s;
+    }
+    #settingsToggle:hover { background: var(--glass-hover); }
+
+    #settingsPanel {
+      position: fixed;
+      top: calc(var(--safe-t) + 58px);
+      left: 12px;
+      width: min(300px, calc(100vw - 24px));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px;
+      border-radius: var(--radius);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      z-index: 20;
+      transform-origin: top left;
+      transform: scale(0);
+      opacity: 0;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      pointer-events: none;
+    }
+    #settingsPanel.open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: all;
+    }
+    #settingsPanel h3 {
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0.7;
+    }
+    #settingsPanel label {
+      font-size: 12px;
+      opacity: 0.6;
+      margin-bottom: -6px;
+    }
+    #settingsPanel select,
+    #settingsPanel input {
+      padding: 9px 12px;
+      border-radius: 12px;
+      border: none;
+      background: rgba(255,255,255,0.6);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    #settingsPanel .row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #settingsPanel .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    #settingsPanel .actions button {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 12px;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #settingsSave  { background: var(--pink-on); color: white; font-weight: 600; }
+    #settingsClose { background: rgba(255,255,255,0.5); }
+    #settingsStatus {
+      font-size: 11px;
+      opacity: 0.7;
+      text-align: center;
+      min-height: 14px;
+    }
+
     /* ── Responsive: narrow phones ─────────────────────── */
     @media (max-width: 380px) {
       #input { font-size: 14px; padding: 11px 14px; }
@@ -272,6 +364,64 @@
 
   <!-- Avatar toggle button -->
   <button id="avatarToggle" onclick="toggleAvatarPanel()" title="Switch avatar">🎭</button>
+
+  <!-- Settings toggle button -->
+  <button id="settingsToggle" onclick="toggleSettingsPanel()" title="AI model settings">⚙️</button>
+
+  <!-- Settings panel (hidden by default) -->
+  <div id="settingsPanel">
+    <h3>AI Model</h3>
+
+    <div class="row">
+      <label for="providerSelect">Provider</label>
+      <select id="providerSelect" onchange="onProviderChange()">
+        <option value="openai">OpenAI</option>
+        <option value="local">Local / Offline (Ollama, LM Studio...)</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="anthropic">Claude</option>
+      </select>
+    </div>
+
+    <!-- OpenAI / Local fields -->
+    <div class="row" data-group="openai local">
+      <label for="baseUrlInput">Server URL</label>
+      <input id="baseUrlInput" type="text" placeholder="https://api.openai.com/v1" />
+    </div>
+    <div class="row" data-group="openai local">
+      <label for="openaiKeyInput">API key</label>
+      <input id="openaiKeyInput" type="password" placeholder="sk-..." />
+    </div>
+    <div class="row" data-group="openai local">
+      <label for="openaiModelInput">Model</label>
+      <input id="openaiModelInput" type="text" placeholder="gpt-4o-mini" />
+    </div>
+
+    <!-- Gemini fields -->
+    <div class="row" data-group="gemini">
+      <label for="geminiKeyInput">Gemini API key</label>
+      <input id="geminiKeyInput" type="password" placeholder="AIza..." />
+    </div>
+    <div class="row" data-group="gemini">
+      <label for="geminiModelInput">Model</label>
+      <input id="geminiModelInput" type="text" placeholder="gemini-2.0-flash" />
+    </div>
+
+    <!-- Claude fields -->
+    <div class="row" data-group="anthropic">
+      <label for="anthropicKeyInput">Claude API key</label>
+      <input id="anthropicKeyInput" type="password" placeholder="sk-ant-..." />
+    </div>
+    <div class="row" data-group="anthropic">
+      <label for="anthropicModelInput">Model</label>
+      <input id="anthropicModelInput" type="text" placeholder="claude-sonnet-4-6" />
+    </div>
+
+    <div id="settingsStatus"></div>
+    <div class="actions">
+      <button id="settingsClose" onclick="toggleSettingsPanel(false)">Cancel</button>
+      <button id="settingsSave" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
 
   <!-- Avatar panel (hidden by default) -->
   <div id="avatarPanel">
@@ -334,6 +484,89 @@
       const panel  = document.getElementById('avatarPanel');
       const toggle = document.getElementById('avatarToggle');
       if (!panel.contains(e.target) && e.target !== toggle) {
+        panel.classList.remove('open');
+      }
+    });
+
+    // ── Settings panel ────────────────────────────────────
+    // Same origin as this page by default. Override by setting
+    // window.YUKI_API_BASE before this script runs if your backend
+    // is served from a different host/port than the page.
+    const API_BASE = window.YUKI_API_BASE || '';
+
+    function toggleSettingsPanel(force) {
+      const panel = document.getElementById('settingsPanel');
+      const open = force !== undefined ? force : !panel.classList.contains('open');
+      panel.classList.toggle('open', open);
+      if (open) loadSettings();
+    }
+
+    function onProviderChange() {
+      const provider = document.getElementById('providerSelect').value;
+      document.querySelectorAll('#settingsPanel [data-group]').forEach(row => {
+        const groups = row.dataset.group.split(' ');
+        row.style.display = groups.includes(provider) ? 'flex' : 'none';
+      });
+    }
+
+    async function loadSettings() {
+      try {
+        const res = await fetch(`${API_BASE}/settings`);
+        const s = await res.json();
+        document.getElementById('providerSelect').value = s.LLM_PROVIDER || 'openai';
+        document.getElementById('baseUrlInput').value = s.LLM_BASE_URL || '';
+        document.getElementById('openaiKeyInput').placeholder = s.LLM_API_KEY || 'sk-...';
+        document.getElementById('openaiModelInput').value = s.LLM_MODEL || '';
+        document.getElementById('geminiKeyInput').placeholder = s.GEMINI_API_KEY || 'AIza...';
+        document.getElementById('geminiModelInput').value = s.GEMINI_MODEL || '';
+        document.getElementById('anthropicKeyInput').placeholder = s.ANTHROPIC_API_KEY || 'sk-ant-...';
+        document.getElementById('anthropicModelInput').value = s.ANTHROPIC_MODEL || '';
+        onProviderChange();
+      } catch (e) {
+        document.getElementById('settingsStatus').textContent = 'Could not reach server';
+      }
+    }
+
+    async function saveSettings() {
+      const statusEl = document.getElementById('settingsStatus');
+      statusEl.textContent = 'Saving...';
+
+      // Leave a key field blank to keep whatever key is already saved
+      // server-side (its placeholder shows the masked current value).
+      const payload = {
+        LLM_PROVIDER: document.getElementById('providerSelect').value,
+        LLM_BASE_URL: document.getElementById('baseUrlInput').value,
+        LLM_API_KEY: document.getElementById('openaiKeyInput').value,
+        LLM_MODEL: document.getElementById('openaiModelInput').value,
+        GEMINI_API_KEY: document.getElementById('geminiKeyInput').value,
+        GEMINI_MODEL: document.getElementById('geminiModelInput').value,
+        ANTHROPIC_API_KEY: document.getElementById('anthropicKeyInput').value,
+        ANTHROPIC_MODEL: document.getElementById('anthropicModelInput').value,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          statusEl.textContent = 'Saved ✓';
+          setTimeout(() => toggleSettingsPanel(false), 600);
+        } else {
+          statusEl.textContent = data.error || 'Failed to save';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Could not reach server';
+      }
+    }
+
+    // Close settings panel when tapping elsewhere
+    document.addEventListener('click', (e) => {
+      const panel  = document.getElementById('settingsPanel');
+      const toggle = document.getElementById('settingsToggle');
+      if (panel && !panel.contains(e.target) && e.target !== toggle) {
         panel.classList.remove('open');
       }
     });
