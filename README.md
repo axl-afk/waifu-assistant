@@ -247,9 +247,14 @@ Please open an issue before starting on a large feature.
 
 ---
 
-## 📄 License
+## License
 
-MIT — free for personal and commercial use.
+This project is licensed under the GNU AGPL v3.0.
+
+Commercial licenses are available for proprietary and commercial use.
+
+Contact: [armanaxlo0o@gmail.com](mailto:armanaxlo0o@gmail.com)
+
 
 ---
 
