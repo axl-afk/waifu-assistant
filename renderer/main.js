@@ -71,7 +71,7 @@ function loadAvatar(filename) {
   }
   document.getElementById('loading').style.display = 'flex';
   loader.load(
-    `./public/avatars/${filename}`,
+    `./avatars/${filename}`,
     (gltf) => {
       const vrm = gltf.userData.vrm;
       VRMUtils.removeUnnecessaryVertices(vrm.scene);
@@ -88,6 +88,7 @@ function loadAvatar(filename) {
       // greeting clip kicking in.
       applyDefaultIdlePose(vrm.humanoid);
       document.getElementById('loading').style.display = 'none';
+      window.dispatchEvent(new Event('waifuReady'));
       console.log('✅ Avatar loaded:', filename);
       // Greet on load
       playMotion('greeting', { fadeIn: 0.3, holdIdleAfter: true });
@@ -170,26 +171,26 @@ function applyDefaultIdlePose(humanoid) {
 //  VRMA MOTION CLIPS
 // ══════════════════════════════════════════════════════════
 const MOTION_FILES = {
-  showFullBody: './public/motions/dance_loop.vrma',
-  greeting:     './public/motions/stand_up_victory.vrma',
-  peaceSign:    './public/motions/idle_lean_sassy.vrma',
-  shoot:        './public/motions/salute_wave.vrma',
-  spin:         './public/motions/greeting_flourish.vrma',
-  modelPose:    './public/motions/thinking_idle.vrma',
-  squat:        './public/motions/tada_presenting.vrma',
+  showFullBody: './motions/dance_loop.vrma',
+  greeting:     './motions/stand_up_victory.vrma',
+  peaceSign:    './motions/idle_lean_sassy.vrma',
+  shoot:        './motions/salute_wave.vrma',
+  spin:         './motions/greeting_flourish.vrma',
+  modelPose:    './motions/thinking_idle.vrma',
+  squat:        './motions/tada_presenting.vrma',
   // Static single-frame poses — previously uploaded but never wired in.
   // Used by the autonomous idle scheduler below, not by the LLM tag system.
-  pose_standing_01:        './public/motions/idle_standing_01.vrma',
-  pose_standing_02:        './public/motions/idle_standing_02.vrma',
-  pose_standing_03:        './public/motions/idle_standing_03.vrma',
-  pose_standing_04:        './public/motions/idle_standing_04.vrma',
-  pose_standing_05:        './public/motions/idle_standing_05.vrma',
-  pose_crouch_kneel:       './public/motions/crouch_kneel.vrma',
-  pose_legs_crossed:       './public/motions/legs_crossed_arm_up.vrma',
-  pose_kick_arms_up:       './public/motions/kick_arms_up.vrma',
-  pose_wave_or_point:      './public/motions/wave_or_point.vrma',
-  pose_walk_step:          './public/motions/walk_step.vrma',
-  pose_bow_reach_forward:  './public/motions/bow_or_reach_forward.vrma',
+  pose_standing_01:        './motions/idle_standing_01.vrma',
+  pose_standing_02:        './motions/idle_standing_02.vrma',
+  pose_standing_03:        './motions/idle_standing_03.vrma',
+  pose_standing_04:        './motions/idle_standing_04.vrma',
+  pose_standing_05:        './motions/idle_standing_05.vrma',
+  pose_crouch_kneel:       './motions/crouch_kneel.vrma',
+  pose_legs_crossed:       './motions/legs_crossed_arm_up.vrma',
+  pose_kick_arms_up:       './motions/kick_arms_up.vrma',
+  pose_wave_or_point:      './motions/wave_or_point.vrma',
+  pose_walk_step:          './motions/walk_step.vrma',
+  pose_bow_reach_forward:  './motions/bow_or_reach_forward.vrma',
 };
 
 // Which MOTION_FILES keys are single-frame static poses (as opposed to

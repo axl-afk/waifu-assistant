@@ -2,158 +2,370 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Waifu Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#D9EDE2"/>
+  <title>Yuki — AI Companion</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: rgb(217, 237, 226);
-      width: 100vw;
-      height: 100vh;
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:        rgb(217, 237, 226);
+      --glass:     rgba(255,255,255,0.45);
+      --glass-hover: rgba(255,255,255,0.7);
+      --pink:      rgba(255,107,157,0.6);
+      --pink-on:   rgba(255,107,157,0.9);
+      --text:      #2a2a2a;
+      --radius:    24px;
+      --safe-b:    env(safe-area-inset-bottom, 0px);
+      --safe-t:    env(safe-area-inset-top, 0px);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
       overflow: hidden;
-      font-family: sans-serif;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
-    canvas { display: block; width: 100%; height: 100%; }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: fixed;
+      inset: 0;
+    }
+
+    /* ── Loading ───────────────────────────────────────── */
     #loading {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      color: #333;
-      font-size: 18px;
-      text-align: center;
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      z-index: 100;
+      transition: opacity 0.4s;
     }
-    #loading span { display: block; margin-top: 10px; font-size: 13px; opacity: 0.6; }
+    #loading .emoji { font-size: 48px; margin-bottom: 16px; }
+    #loading .title { font-size: 20px; font-weight: 600; }
+    #loading span   { font-size: 13px; opacity: 0.55; margin-top: 8px; }
 
+    /* ── Status pill ───────────────────────────────────── */
     #status {
-      position: absolute;
-      top: 14px; left: 50%;
+      position: fixed;
+      top: calc(var(--safe-t) + 14px);
+      left: 50%;
       transform: translateX(-50%);
-      color: #333;
       font-size: 13px;
-      background: rgba(255,255,255,0.5);
-      padding: 4px 16px;
+      background: var(--glass);
+      padding: 5px 16px;
       border-radius: 20px;
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       pointer-events: none;
+      white-space: nowrap;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
 
+    /* ── Chat bubbles ──────────────────────────────────── */
     #chat {
-      position: absolute;
-      bottom: 110px; left: 16px;
-      width: 280px;
-      max-height: 260px;
+      position: fixed;
+      bottom: calc(var(--safe-b) + 100px);
+      left: 12px;
+      right: 12px;
+      max-height: 35vh;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      gap: 5px;
+      z-index: 10;
+      /* hide scrollbar */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    #chat::-webkit-scrollbar { display: none; }
 
-    /* ── Bottom bar ── */
+    /* ── Bottom bar ────────────────────────────────────── */
     #bottomBar {
-      position: absolute;
-      bottom: 24px; left: 50%;
-      transform: translateX(-50%);
+      position: fixed;
+      bottom: calc(var(--safe-b) + 16px);
+      left: 12px;
+      right: 12px;
       display: flex;
       gap: 8px;
       align-items: center;
-      width: 520px;
+      z-index: 10;
     }
+
     #input {
       flex: 1;
-      padding: 12px 18px;
-      border-radius: 24px;
+      min-width: 0;
+      padding: 13px 18px;
+      border-radius: var(--radius);
       border: none;
-      background: rgba(255,255,255,0.5);
-      color: #333;
+      background: var(--glass);
+      color: var(--text);
       font-size: 15px;
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       outline: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: background 0.2s;
     }
+    #input:focus { background: rgba(255,255,255,0.65); }
+    #input::placeholder { color: rgba(0,0,0,0.35); }
+
     .btn {
-      padding: 12px 18px;
-      border-radius: 24px;
+      flex-shrink: 0;
+      height: 48px;
+      padding: 0 16px;
+      border-radius: var(--radius);
       border: none;
-      background: rgba(255,255,255,0.4);
-      color: #333;
+      background: var(--glass);
+      color: var(--text);
       font-size: 15px;
       cursor: pointer;
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: background 0.15s, transform 0.1s;
       white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .btn:hover { background: rgba(255,255,255,0.7); }
+    .btn:hover  { background: var(--glass-hover); }
+    .btn:active { transform: scale(0.95); }
+
     #micBtn {
-      width: 52px; height: 52px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
-      background: rgba(255,107,157,0.5);
+      padding: 0;
+      background: var(--pink);
       font-size: 22px;
     }
-    #micBtn:hover { background: rgba(255,107,157,0.8); }
+    #micBtn:hover  { background: var(--pink-on); }
+    #micBtn.active { background: var(--pink-on); animation: pulse 1s infinite; }
 
-    /* ── Avatar switcher ── */
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,157,0.4); }
+      50%       { box-shadow: 0 0 0 8px rgba(255,107,157,0); }
+    }
+
+    /* ── Avatar panel ──────────────────────────────────── */
+    #avatarToggle {
+      position: fixed;
+      top: calc(var(--safe-t) + 12px);
+      right: 12px;
+      z-index: 20;
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      border: none;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: background 0.15s;
+    }
+    #avatarToggle:hover { background: var(--glass-hover); }
+
     #avatarPanel {
-      position: absolute;
-      top: 14px; right: 14px;
+      position: fixed;
+      top: calc(var(--safe-t) + 58px);
+      right: 12px;
       display: flex;
       flex-direction: column;
       gap: 5px;
+      z-index: 20;
+      transform-origin: top right;
+      transform: scale(0);
+      opacity: 0;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      pointer-events: none;
     }
+    #avatarPanel.open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: all;
+    }
+
     .avBtn {
-      padding: 5px 12px;
-      border-radius: 12px;
+      padding: 7px 14px;
+      border-radius: 14px;
       border: none;
-      background: rgba(255,255,255,0.4);
-      color: #333;
+      background: var(--glass);
+      color: var(--text);
       font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: background 0.15s;
+      white-space: nowrap;
+      text-align: right;
     }
-    .avBtn:hover { background: rgba(255,255,255,0.75); }
-    .avBtn.active { background: rgba(255,107,157,0.5); font-weight: 600; }
+    .avBtn:hover  { background: var(--glass-hover); }
+    .avBtn.active { background: var(--pink); font-weight: 600; }
+
+    /* ── Responsive: narrow phones ─────────────────────── */
+    @media (max-width: 380px) {
+      #input { font-size: 14px; padding: 11px 14px; }
+      .btn   { font-size: 13px; padding: 0 12px; height: 44px; }
+      #micBtn { width: 46px; height: 46px; font-size: 20px; }
+    }
+
+    /* ── Responsive: hide send text on very small screens ─ */
+    @media (max-width: 340px) {
+      #sendBtn span { display: none; }
+      #sendBtn { width: 48px; padding: 0; }
+    }
+
+    /* ── Responsive: tablet/desktop — wider input bar ─────  */
+    @media (min-width: 600px) {
+      #bottomBar {
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(560px, calc(100vw - 24px));
+      }
+      #chat {
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(480px, calc(100vw - 24px));
+        right: auto;
+      }
+    }
+
+    /* ── Landscape phone: reduce chat height ──────────────  */
+    @media (max-height: 480px) {
+      #chat { max-height: 20vh; }
+      #bottomBar { bottom: calc(var(--safe-b) + 8px); }
+    }
   </style>
 </head>
 <body>
 
-  <div id="loading">Loading Yuki... 💫<span>please wait</span></div>
+  <!-- Loading screen -->
+  <div id="loading">
+    <div class="emoji">🌸</div>
+    <div class="title">Loading Yuki...</div>
+    <span>please wait</span>
+  </div>
+
+  <!-- 3D canvas -->
   <canvas id="canvas"></canvas>
+
+  <!-- Status -->
   <div id="status">Connecting...</div>
+
+  <!-- Avatar toggle button -->
+  <button id="avatarToggle" onclick="toggleAvatarPanel()" title="Switch avatar">🎭</button>
+
+  <!-- Avatar panel (hidden by default) -->
+  <div id="avatarPanel">
+    <button class="avBtn active" onclick="switchAvatar(this,'2484111366324162525.vrm')">Avatar 1</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'3803401280262951642.vrm')">Avatar 2</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'9063535458662491846.vrm')">Avatar 3</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'38362221736407304.vrm')">Avatar 4</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'3081451431474121997.vrm')">Avatar 5</button>
+    <button class="avBtn"        onclick="switchAvatar(this,'5018128617262021736.vrm')">Avatar 6 ★</button>
+  </div>
 
   <!-- Chat bubbles -->
   <div id="chat"></div>
 
   <!-- Bottom input bar -->
   <div id="bottomBar">
-    <input id="input" type="text" placeholder="Talk to Yuki..."
-      onkeydown="if(event.key==='Enter'){ waifuAPI.sendMessage(this.value); this.value=''; }" />
+    <input
+      id="input"
+      type="text"
+      placeholder="Talk to Yuki..."
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+      onkeydown="if(event.key==='Enter'){ waifuAPI.sendMessage(this.value); this.value=''; }"
+    />
 
-    <button class="btn" onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''">
-      Send
+    <button class="btn" id="sendBtn"
+      onclick="waifuAPI.sendMessage(document.getElementById('input').value); document.getElementById('input').value=''">
+      <span>Send</span>
     </button>
 
     <button class="btn" id="micBtn"
-      onmousedown="waifuAPI.startRecording()"
-      onmouseup="waifuAPI.stopRecording()"
-      ontouchstart="waifuAPI.startRecording()"
-      ontouchend="waifuAPI.stopRecording()">🎤</button>
+      onmousedown="startMic()"
+      onmouseup="stopMic()"
+      onmouseleave="stopMic()"
+      ontouchstart="startMic(event)"
+      ontouchend="stopMic(event)"
+      ontouchcancel="stopMic(event)"
+    >🎤</button>
 
-    <button class="btn" id="autoBtn" onclick="waifuAPI.toggleAutoListen()">🔁 Auto</button>
-  </div>
-
-  <!-- Avatar switcher — all 7 models -->
-  <div id="avatarPanel">
-    <button class="avBtn active" onclick="switchAvatar(this,'2484111366324162525.vrm')">Avatar 1</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'3803401280262951642.vrm')">Avatar 2</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'9063535458662491846.vrm')">Avatar 3</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'3003516514077908910.vrm')">Avatar 4</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'38362221736407304.vrm')">Avatar 5</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'3081451431474121997.vrm')">Avatar 6</button>
-    <button class="avBtn"        onclick="switchAvatar(this,'5018128617262021736.vrm')">Avatar 7 ★</button>
+    <button class="btn" id="autoBtn"
+      onclick="toggleAuto()">🔁</button>
   </div>
 
   <script>
+    // ── Avatar panel toggle ──────────────────────────────
+    function toggleAvatarPanel() {
+      document.getElementById('avatarPanel').classList.toggle('open');
+    }
+
     function switchAvatar(btn, filename) {
       document.querySelectorAll('.avBtn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       waifuAPI.loadAvatar(filename);
+      document.getElementById('avatarPanel').classList.remove('open');
     }
+
+    // Close avatar panel when tapping elsewhere
+    document.addEventListener('click', (e) => {
+      const panel  = document.getElementById('avatarPanel');
+      const toggle = document.getElementById('avatarToggle');
+      if (!panel.contains(e.target) && e.target !== toggle) {
+        panel.classList.remove('open');
+      }
+    });
+
+    // ── Mic helpers ──────────────────────────────────────
+    function startMic(e) {
+      if (e) e.preventDefault();
+      document.getElementById('micBtn').classList.add('active');
+      waifuAPI.startRecording();
+    }
+    function stopMic(e) {
+      if (e) e.preventDefault();
+      document.getElementById('micBtn').classList.remove('active');
+      waifuAPI.stopRecording();
+    }
+
+    // ── Auto listen toggle ───────────────────────────────
+    let _auto = false;
+    function toggleAuto() {
+      _auto = !_auto;
+      const btn = document.getElementById('autoBtn');
+      btn.textContent = _auto ? '🔁 ON' : '🔁';
+      btn.style.background = _auto ? 'rgba(255,107,157,0.7)' : '';
+      waifuAPI.toggleAutoListen();
+    }
+
+    // ── Hide loading once canvas is ready ────────────────
+    window.addEventListener('waifuReady', () => {
+      const el = document.getElementById('loading');
+      el.style.opacity = '0';
+      setTimeout(() => el.style.display = 'none', 400);
+    });
   </script>
 
   <script type="module" src="./main.js"></script>

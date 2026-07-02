@@ -14,5 +14,8 @@
     "@pixiv/three-vrm": "^3.5.4",
     "@pixiv/three-vrm-animation": "^3.5.4",
     "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "vite": "^8.1.2"
   }
 }
